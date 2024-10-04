@@ -63,9 +63,9 @@ class Network {
 
         //forwardPass (inputs, expected outputs)
         //return cost
-        double forwardPass(vector<double> in, vector<double> out) {
+        double forwardPass(const Eigen::MatrixXd& in, const Eigen::MatrixXd& out) {
             for (int i = 0; i < layerSizes[0]; i++) {
-                activations[0](i,0) = in[i];
+                activations[0](i,0) = in(i,0);
             }
         
             for (int l = 1; l < L; l++) {
@@ -74,7 +74,7 @@ class Network {
 
             double passCost = 0;
             for (int i = 0; i < layerSizes[L-1]; i++) {
-                passCost += pow(out[i] - activations[L-1](i,0), 2);
+                passCost += pow(out(i,0) - activations[L-1](i,0), 2);
             } 
 
             return passCost;
@@ -129,7 +129,7 @@ class Network {
 
         //CALCULATE ERROR OF LAST LAYER
         Eigen::MatrixXd lastError() {
-
+            
         }
 };
 
@@ -137,7 +137,13 @@ int main() {
     Network a(vector<int>{5,3,3});
     //a.display();
     //cout << "-----" << endl << endl;
-    a.forwardPass(vector<double>{1,0,1,0,1}, vector<double>{0,0,1});
+    Eigen::MatrixXd input(5,1);
+    Eigen::MatrixXd output(3,1);
+
+    input << 1,0,1,0,1;
+    output << 0,0,1;
+
+    a.forwardPass(input, output);
     a.display();
 }
 
