@@ -1,2 +1,2 @@
 # neural-network
-C++ neural network built from scratch
+C++ neural network built using Eigen matrices
