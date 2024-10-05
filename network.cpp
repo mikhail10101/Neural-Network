@@ -8,7 +8,7 @@
 using namespace std;
 
 const int RANDOM_SEED = 49;
-const double ETA = 0.05f;
+const double ETA = 0.1;
  
 class Network {
     public: 
@@ -22,10 +22,13 @@ class Network {
 
             activations.push_back(Eigen::MatrixXd(layerSizes[0],1));
             zs.push_back(Eigen::MatrixXd(layerSizes[0],1));
-            weights.push_back(Eigen::MatrixXd());   //null value for indexing
+
+
+            //null value for simpler indexing
+            weights.push_back(Eigen::MatrixXd());   
             weightDerivatives.push_back(Eigen::MatrixXd());
             weightDerivativesTotal.push_back(Eigen::MatrixXd());
-            biases.push_back(Eigen::MatrixXd());    //null value for indexing
+            biases.push_back(Eigen::MatrixXd());
             biasDerivatives.push_back(Eigen::MatrixXd());
             biasDerivativesTotal.push_back(Eigen::MatrixXd());
             
@@ -56,6 +59,15 @@ class Network {
         }
 
 
+        void test(const Eigen::MatrixXd& testingData) {
+            for (int m = 0; m < testingData.cols(); m++) {
+                forwardPass(testingData.col(m));
+                cout << activations[L-1] << endl << endl;
+            }
+        }
+
+
+        //STOCHASTIC GRADIENT DESCENT
         void SGD(const Eigen::MatrixXd& trainingData, const Eigen::MatrixXd& expectedValues, int epochs, int minibatchSize) {
             Eigen::MatrixXd shuffledData;
             Eigen::MatrixXd shuffledValues;
@@ -72,46 +84,21 @@ class Network {
                 shuffledValues = expectedValues(Eigen::all, indexVect);
 
                 int k = 0;
+                double epochCost = 0;
                 while (k < amount) {
                     int end = min(k + minibatchSize, amount);
 
                     Eigen::MatrixXd mb = shuffledData(Eigen::all, Eigen::seq(k, end-1));
                     Eigen::MatrixXd ev = shuffledValues(Eigen::all, Eigen::seq(k, end-1));
-                    double minibatchCost = minibatch(mb, ev);
-
-                    cout << minibatchCost << endl;
+                    epochCost += minibatch(mb, ev);
 
                     k = end;
                 }
+
+                //cout << epochCost / (amount/minibatchSize) << endl;
             }
         }
 
-
-        //X is a matrix of n x m dimension
-        //Y is a matrix of ? x m dimension
-        double minibatch(Eigen::MatrixXd X, Eigen::MatrixXd Y) {
-            int m = X.cols();
-            double totalCost = 0;
-
-            for (int i = 0; i < m; i++) {
-                forwardPass(X.col(i));
-                backwardPass(Y.col(i));
-
-                totalCost += calculateCost(Y);
-
-                for (int l = 1; l < L; l++) {
-                    weightDerivativesTotal[l] += weightDerivatives[l];
-                    biasDerivativesTotal[l] += biasDerivatives[l];
-                }
-            }
-
-            for (int l = 1; l < L; l++) {
-                weights[l] -= ETA*weightDerivatives[l]/m;
-                biases[l] -= ETA*biasDerivatives[l]/m;
-            }
-            
-            return totalCost/m;
-        }
 
 
         ~Network() {
@@ -120,8 +107,7 @@ class Network {
         }
 
 
-
-    //private:
+    private:
         mt19937* g;
         normal_distribution<double>* nd;
 
@@ -158,12 +144,15 @@ class Network {
             for (int i = 0; i < layerSizes[L-1]; i++) {
                 passCost += pow(out(i,0) - activations[L-1](i,0), 2);
             } 
-
             return passCost;
         }
 
         //backwardPass
         void backwardPass(const Eigen::MatrixXd& out) {
+            // cout << activations[L-1] << endl << endl;
+            // cout << out << endl << endl;
+            // cout << zs[L-1].unaryExpr([this](double x){return this->activationPrime(x);});
+
             Eigen::MatrixXd lastErrorLayer = 
                 (activations[L-1] - out).array() * zs[L-1].unaryExpr([this](double x){return this->activationPrime(x);}).array();
 
@@ -172,11 +161,10 @@ class Network {
             
             for (int l = L-2; l > 0; l--) {
                 lastErrorLayer = (weights[l+1].transpose() * lastErrorLayer).array() * zs[l].unaryExpr([this](double x){return this->activationPrime(x);}).array();
-                biasDerivatives[L-1] = lastErrorLayer;
-                weightDerivatives[L-1] = lastErrorLayer * activations[L-2].transpose();
+                biasDerivatives[l] = lastErrorLayer;
+                weightDerivatives[l] = lastErrorLayer * activations[l-1].transpose();
             }
         }
-
 
 
         //SOLVE FOR ACTIVATIONS
@@ -184,6 +172,38 @@ class Network {
         void solveActivations(int index) {
             zs[index] = weights[index] * activations[index-1] + biases[index];
             activations[index] = zs[index].unaryExpr([this](double x){return this->activationFunc(x);});
+        }
+
+
+
+        //X is a matrix of n x m dimension
+        //Y is a matrix of ? x m dimension
+        double minibatch(Eigen::MatrixXd X, Eigen::MatrixXd Y) {
+            for (int l = 1; l < L; l++) {
+                weightDerivativesTotal[l] *= 0;
+                biasDerivativesTotal[l] *= 0;
+            }
+
+            int m = X.cols();
+            double totalCost = 0;
+
+            for (int i = 0; i < m; i++) {
+                forwardPass(X.col(i));
+                backwardPass(Y.col(i));
+
+                totalCost += calculateCost(Y.col(i));
+
+                for (int l = 1; l < L; l++) {
+                    weightDerivativesTotal[l] += weightDerivatives[l];
+                    biasDerivativesTotal[l] += biasDerivatives[l];
+                }
+            }
+
+            for (int l = 1; l < L; l++) {
+                weights[l] -= ETA*weightDerivativesTotal[l]/m;
+                biases[l] -= ETA*biasDerivativesTotal[l]/m;
+            }            
+            return totalCost/(double)m;
         }
 
 
@@ -207,30 +227,33 @@ class Network {
 
 
 
-        //ReLU FUNCTION
+        //Sigmoid FUNCTION
         double activationFunc(double in) {
-            if (in > 0) { return in; }
-            else { return 0; }
+            return 1 / (1 + exp(-in));
         }
 
 
-
-        //ReLU PRIME
+        //Sigmoid PRIME
         double activationPrime(double in) {
-            if (in > 0) { return 1; }
-            else { return 0; }
+            return activationFunc(in) * (1 - activationFunc(in));
         }
 };
 
 int main() {
-    Network a(vector<int>{5,3,3});
+    Network a(vector<int>{1, 3, 3, 1});
 
-    Eigen::MatrixXd input(5,2);
-    Eigen::MatrixXd output(3,2);
+    Eigen::MatrixXd input(1,5000);
+    Eigen::MatrixXd output(1,5000);
+    Eigen::MatrixXd testing(1,10);
 
-    input << 1,0,0,0,1,1,0,0,1,1;
-    output << 0,0,0,0,1,1;
-    
-    a.SGD(input, output, 10, 2);
+    for (int i = 0; i < 5000; i++) {
+        input(0, i) = i/(double)5000;
+        output(0, i) = i/(double)5000;
+    }
+
+    testing << 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.55;
+
+    a.SGD(input, output, 30, 50);
+    a.test(testing);
 }
 
