@@ -8,7 +8,6 @@
 using namespace std;
 
 const int RANDOM_SEED = 49;
-const double ETA = 0.1;
  
 class Network {
     public: 
@@ -68,7 +67,8 @@ class Network {
 
 
         //STOCHASTIC GRADIENT DESCENT
-        void SGD(const Eigen::MatrixXd& trainingData, const Eigen::MatrixXd& expectedValues, int epochs, int minibatchSize) {
+        void SGD(const Eigen::MatrixXd& trainingData, const Eigen::MatrixXd& expectedValues, int epochs, int minibatchSize, double eta) {
+            ETA = eta;
             Eigen::MatrixXd shuffledData;
             Eigen::MatrixXd shuffledValues;
             int amount = trainingData.cols();
@@ -113,6 +113,7 @@ class Network {
 
         vector<int> layerSizes;
         int L;
+        double ETA = 0.1;
 
         vector<Eigen::MatrixXd> activations;
         vector<Eigen::MatrixXd> zs;
@@ -227,33 +228,33 @@ class Network {
 
 
 
-        //Sigmoid FUNCTION
         double activationFunc(double in) {
-            return 1 / (1 + exp(-in));
+            return in;
+            //return 1 / (1 + exp(-in));
         }
 
 
-        //Sigmoid PRIME
         double activationPrime(double in) {
-            return activationFunc(in) * (1 - activationFunc(in));
+            return 1;
+            //return activationFunc(in) * (1 - activationFunc(in));
         }
 };
 
 int main() {
-    Network a(vector<int>{1, 3, 3, 1});
+    Network a(vector<int>{1, 16, 1});
 
-    Eigen::MatrixXd input(1,5000);
-    Eigen::MatrixXd output(1,5000);
+    Eigen::MatrixXd input(1,90);
+    Eigen::MatrixXd output(1,90);
     Eigen::MatrixXd testing(1,10);
 
-    for (int i = 0; i < 5000; i++) {
-        input(0, i) = i/(double)5000;
-        output(0, i) = i/(double)5000;
+    for (int i = 0; i < 90; i++) {
+        input(0, i) = i/(double)90;
+        output(0, i) = i/(double)90;
     }
 
     testing << 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.55;
 
-    a.SGD(input, output, 30, 50);
+    a.SGD(input, output, 100, 50, 0.1);
     a.test(testing);
 }
 
