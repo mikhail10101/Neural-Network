@@ -11,6 +11,8 @@ const int RANDOM_SEED = 49;
  
 class Network {
     public: 
+        //CONSTRUCTOR
+        //take in vector of size L, each number representing the amount of neurons at that layer
         Network(vector<int> inputSizes) {
             //Initializes random values from the normal distribution
             g = new mt19937(RANDOM_SEED);
@@ -22,8 +24,7 @@ class Network {
             activations.push_back(Eigen::MatrixXd(layerSizes[0],1));
             zs.push_back(Eigen::MatrixXd(layerSizes[0],1));
 
-
-            //null value for simpler indexing
+            //push null value for simpler indexing
             weights.push_back(Eigen::MatrixXd());   
             weightDerivatives.push_back(Eigen::MatrixXd());
             weightDerivativesTotal.push_back(Eigen::MatrixXd());
@@ -31,17 +32,14 @@ class Network {
             biasDerivatives.push_back(Eigen::MatrixXd());
             biasDerivativesTotal.push_back(Eigen::MatrixXd());
             
-
             for (int l = 1; l < L; l++) {
                 activations.push_back(Eigen::MatrixXd(layerSizes[l],1));
                 zs.push_back(Eigen::MatrixXd(layerSizes[l],1));
-
 
                 weights.push_back(Eigen::MatrixXd(layerSizes[l],layerSizes[l-1]));
                 initializeWeightsMatrix(l);
                 weightDerivatives.push_back(Eigen::MatrixXd(layerSizes[l],layerSizes[l-1]));
                 weightDerivativesTotal.push_back(Eigen::MatrixXd(layerSizes[l],layerSizes[l-1]));
-
 
                 biases.push_back(Eigen::MatrixXd::Zero(layerSizes[l],1));
                 biasDerivatives.push_back(Eigen::MatrixXd::Zero(layerSizes[l],1));
@@ -57,14 +55,12 @@ class Network {
             }
         }
 
-
-        void test(const Eigen::MatrixXd& testingData) {
+        void testDisplay(const Eigen::MatrixXd& testingData) {
             for (int m = 0; m < testingData.cols(); m++) {
                 forwardPass(testingData.col(m));
                 cout << activations[L-1] << endl << endl;
             }
         }
-
 
         //STOCHASTIC GRADIENT DESCENT
         void SGD(const Eigen::MatrixXd& trainingData, const Eigen::MatrixXd& expectedValues, int epochs, int minibatchSize, double eta) {
@@ -94,12 +90,8 @@ class Network {
 
                     k = end;
                 }
-
-                //cout << epochCost / (amount/minibatchSize) << endl;
             }
         }
-
-
 
         ~Network() {
             delete g;
@@ -126,9 +118,7 @@ class Network {
         vector<Eigen::MatrixXd> weightDerivativesTotal;
         vector<Eigen::MatrixXd> biasDerivativesTotal;
 
-
-        //forwardPass (inputs, expected outputs)
-        //return cost
+        //FORWARD PASS
         void forwardPass(const Eigen::MatrixXd& in) {
             for (int i = 0; i < layerSizes[0]; i++) {
                 activations[0](i,0) = in(i,0);
@@ -137,6 +127,13 @@ class Network {
             for (int l = 1; l < L; l++) {
                 solveActivations(l);
             }
+        }
+
+        //SOLVE FOR ACTIVATIONS
+        //fill up zs along the way
+        void solveActivations(int index) {
+            zs[index] = weights[index] * activations[index-1] + biases[index];
+            activations[index] = zs[index].unaryExpr([this](double x){return this->activationFunc(x);});
         }
 
         //calculate cost
@@ -148,12 +145,8 @@ class Network {
             return passCost;
         }
 
-        //backwardPass
+        //BACKWARD PASS
         void backwardPass(const Eigen::MatrixXd& out) {
-            // cout << activations[L-1] << endl << endl;
-            // cout << out << endl << endl;
-            // cout << zs[L-1].unaryExpr([this](double x){return this->activationPrime(x);});
-
             Eigen::MatrixXd lastErrorLayer = 
                 (activations[L-1] - out).array() * zs[L-1].unaryExpr([this](double x){return this->activationPrime(x);}).array();
 
@@ -167,18 +160,8 @@ class Network {
             }
         }
 
-
-        //SOLVE FOR ACTIVATIONS
-        //fill up zs along the way
-        void solveActivations(int index) {
-            zs[index] = weights[index] * activations[index-1] + biases[index];
-            activations[index] = zs[index].unaryExpr([this](double x){return this->activationFunc(x);});
-        }
-
-
-
-        //X is a matrix of n x m dimension
-        //Y is a matrix of ? x m dimension
+        //MINIBATCH UPDATE
+        //input in X corresponds to expected output in Y (by column)
         double minibatch(Eigen::MatrixXd X, Eigen::MatrixXd Y) {
             for (int l = 1; l < L; l++) {
                 weightDerivativesTotal[l] *= 0;
@@ -208,13 +191,11 @@ class Network {
         }
 
 
-
         //WEIGHT GENERATION for He Initialization
+        //values from a standard deviation * 2
         double generateWeightValue(int previousInputAmount) {
             return 2*(nd->operator()(*g))/previousInputAmount;
         }
-
-
 
         //INITIALIZE WEIGHT VALUES
         void initializeWeightsMatrix(int index) {
@@ -227,19 +208,22 @@ class Network {
         }
 
 
-
+        //DEFINE ACTIVATION FUNCTION
         double activationFunc(double in) {
-            return in;
-            //return 1 / (1 + exp(-in));
+            return in;                                                  //x = y
+            //return 1 / (1 + exp(-in));                                //Sigmoid
         }
 
 
         double activationPrime(double in) {
-            return 1;
-            //return activationFunc(in) * (1 - activationFunc(in));
+            return 1;                                                   //x = y
+            //return activationFunc(in) * (1 - activationFunc(in));     //Sigmoid
         }
 };
 
+
+
+//TESTING
 int main() {
     Network a(vector<int>{1, 16, 1});
 
@@ -255,6 +239,6 @@ int main() {
     testing << 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.55;
 
     a.SGD(input, output, 100, 50, 0.1);
-    a.test(testing);
+    a.testDisplay(testing);
 }
 
