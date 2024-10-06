@@ -1,13 +1,21 @@
-#include <iostream>
-#include <vector>
-#include <string>
 #include <random>
-#include <cmath>
-#include "eigen-3.4.0/Eigen/Dense"
+#include <algorithm>
+#include "mat2d.h"
 
 using namespace std;
 
 const int RANDOM_SEED = 49;
+
+//DEFINE ACTIVATION FUNCTION
+double activationFunc(double in) {
+    return in;                                                  //x = y
+    //return 1 / (1 + exp(-in));                                //Sigmoid
+}
+
+double activationPrime(double in) {
+    return 1;                                                   //x = y
+    //return activationFunc(in) * (1 - activationFunc(in));     //Sigmoid
+}
  
 class Network {
     public: 
@@ -21,30 +29,7 @@ class Network {
             layerSizes = inputSizes;
             L = inputSizes.size();
 
-            activations.push_back(Eigen::MatrixXd(layerSizes[0],1));
-            zs.push_back(Eigen::MatrixXd(layerSizes[0],1));
-
-            //push null value for simpler indexing
-            weights.push_back(Eigen::MatrixXd());   
-            weightDerivatives.push_back(Eigen::MatrixXd());
-            weightDerivativesTotal.push_back(Eigen::MatrixXd());
-            biases.push_back(Eigen::MatrixXd());
-            biasDerivatives.push_back(Eigen::MatrixXd());
-            biasDerivativesTotal.push_back(Eigen::MatrixXd());
-            
-            for (int l = 1; l < L; l++) {
-                activations.push_back(Eigen::MatrixXd(layerSizes[l],1));
-                zs.push_back(Eigen::MatrixXd(layerSizes[l],1));
-
-                weights.push_back(Eigen::MatrixXd(layerSizes[l],layerSizes[l-1]));
-                initializeWeightsMatrix(l);
-                weightDerivatives.push_back(Eigen::MatrixXd(layerSizes[l],layerSizes[l-1]));
-                weightDerivativesTotal.push_back(Eigen::MatrixXd(layerSizes[l],layerSizes[l-1]));
-
-                biases.push_back(Eigen::MatrixXd::Zero(layerSizes[l],1));
-                biasDerivatives.push_back(Eigen::MatrixXd::Zero(layerSizes[l],1));
-                biasDerivativesTotal.push_back(Eigen::MatrixXd::Zero(layerSizes[l],1));
-            }
+            indexInitializeHelper();
         }
 
         void display() {
@@ -55,19 +40,19 @@ class Network {
             }
         }
 
-        void testDisplay(const Eigen::MatrixXd& testingData) {
-            for (int m = 0; m < testingData.cols(); m++) {
+        void testDisplay(Mat2d& testingData) {
+            for (int m = 0; m < testingData.getCols(); m++) {
                 forwardPass(testingData.col(m));
-                cout << activations[L-1] << endl << endl;
+                cout << activations[L-1] << endl;
             }
         }
 
         //STOCHASTIC GRADIENT DESCENT
-        void SGD(const Eigen::MatrixXd& trainingData, const Eigen::MatrixXd& expectedValues, int epochs, int minibatchSize, double eta) {
+        void SGD(const Mat2d& trainingData, const Mat2d& expectedValues, int epochs, int minibatchSize, double eta) {
             ETA = eta;
-            Eigen::MatrixXd shuffledData;
-            Eigen::MatrixXd shuffledValues;
-            int amount = trainingData.cols();
+            Mat2d shuffledData;
+            Mat2d shuffledValues;
+            int amount = trainingData.getCols();
 
             vector<int> indexVect;
             for (int i = 0; i < amount; i++) {
@@ -76,16 +61,16 @@ class Network {
 
             for (int e = 0; e < epochs; e++) {
                 shuffle(indexVect.begin(), indexVect.end(), *g);
-                shuffledData = trainingData(Eigen::all, indexVect);
-                shuffledValues = expectedValues(Eigen::all, indexVect);
+                shuffledData = trainingData.selectColumns(indexVect);
+                shuffledValues = expectedValues.selectColumns(indexVect);
 
                 int k = 0;
                 double epochCost = 0;
                 while (k < amount) {
                     int end = min(k + minibatchSize, amount);
 
-                    Eigen::MatrixXd mb = shuffledData(Eigen::all, Eigen::seq(k, end-1));
-                    Eigen::MatrixXd ev = shuffledValues(Eigen::all, Eigen::seq(k, end-1));
+                    Mat2d mb = shuffledData.colSlice(k,end);
+                    Mat2d ev = shuffledValues.colSlice(k,end);
                     epochCost += minibatch(mb, ev);
 
                     k = end;
@@ -107,21 +92,21 @@ class Network {
         int L;
         double ETA = 0.1;
 
-        vector<Eigen::MatrixXd> activations;
-        vector<Eigen::MatrixXd> zs;
-        vector<Eigen::MatrixXd> weights;
-        vector<Eigen::MatrixXd> biases;
+        vector<Mat2d> activations;
+        vector<Mat2d> zs;
+        vector<Mat2d> weights;
+        vector<Mat2d> biases;
 
-        vector<Eigen::MatrixXd> weightDerivatives;
-        vector<Eigen::MatrixXd> biasDerivatives;
+        vector<Mat2d> weightDerivatives;
+        vector<Mat2d> biasDerivatives;
 
-        vector<Eigen::MatrixXd> weightDerivativesTotal;
-        vector<Eigen::MatrixXd> biasDerivativesTotal;
+        vector<Mat2d> weightDerivativesTotal;
+        vector<Mat2d> biasDerivativesTotal;
 
         //FORWARD PASS
-        void forwardPass(const Eigen::MatrixXd& in) {
+        void forwardPass(const Mat2d& in) {
             for (int i = 0; i < layerSizes[0]; i++) {
-                activations[0](i,0) = in(i,0);
+                activations[0](i,0) = in.get(i,0);
             }
 
             for (int l = 1; l < L; l++) {
@@ -133,28 +118,30 @@ class Network {
         //fill up zs along the way
         void solveActivations(int index) {
             zs[index] = weights[index] * activations[index-1] + biases[index];
-            activations[index] = zs[index].unaryExpr([this](double x){return this->activationFunc(x);});
+            activations[index] = zs[index].applyFunc([](double x){return activationFunc(x);});
         }
 
         //calculate cost
-        double calculateCost(const Eigen::MatrixXd& out) {
+        double calculateCost(const Mat2d& out) {
             double passCost = 0;
             for (int i = 0; i < layerSizes[L-1]; i++) {
-                passCost += pow(out(i,0) - activations[L-1](i,0), 2);
+                passCost += pow(out.get(i,0) - activations[L-1].get(i,0), 2);
             } 
             return passCost;
         }
 
         //BACKWARD PASS
-        void backwardPass(const Eigen::MatrixXd& out) {
-            Eigen::MatrixXd lastErrorLayer = 
-                (activations[L-1] - out).array() * zs[L-1].unaryExpr([this](double x){return this->activationPrime(x);}).array();
+        void backwardPass(const Mat2d& out) {
+            auto actPrime = [this](double x){return activationPrime(x);};
+
+            Mat2d lastErrorLayer = 
+                ((activations[L-1] - out)^(zs[L-1].applyFunc([](double x){return activationPrime(x);})));
 
             biasDerivatives[L-1] = lastErrorLayer;
             weightDerivatives[L-1] = lastErrorLayer * activations[L-2].transpose();
             
             for (int l = L-2; l > 0; l--) {
-                lastErrorLayer = (weights[l+1].transpose() * lastErrorLayer).array() * zs[l].unaryExpr([this](double x){return this->activationPrime(x);}).array();
+                lastErrorLayer = ((weights[l+1].transpose() * lastErrorLayer)^(zs[l].applyFunc([](double x){return activationPrime(x);})));
                 biasDerivatives[l] = lastErrorLayer;
                 weightDerivatives[l] = lastErrorLayer * activations[l-1].transpose();
             }
@@ -162,13 +149,13 @@ class Network {
 
         //MINIBATCH UPDATE
         //input in X corresponds to expected output in Y (by column)
-        double minibatch(Eigen::MatrixXd X, Eigen::MatrixXd Y) {
+        double minibatch(Mat2d X, Mat2d Y) {
             for (int l = 1; l < L; l++) {
-                weightDerivativesTotal[l] *= 0;
-                biasDerivativesTotal[l] *= 0;
+                weightDerivativesTotal[l] = 0*weightDerivativesTotal[l];
+                biasDerivativesTotal[l] = 0*biasDerivativesTotal[l];
             }
 
-            int m = X.cols();
+            int m = X.getCols();
             double totalCost = 0;
 
             for (int i = 0; i < m; i++) {
@@ -178,14 +165,14 @@ class Network {
                 totalCost += calculateCost(Y.col(i));
 
                 for (int l = 1; l < L; l++) {
-                    weightDerivativesTotal[l] += weightDerivatives[l];
-                    biasDerivativesTotal[l] += biasDerivatives[l];
+                    weightDerivativesTotal[l] = weightDerivativesTotal[l] + weightDerivatives[l];
+                    biasDerivativesTotal[l] = biasDerivativesTotal[l] + biasDerivatives[l];
                 }
             }
 
             for (int l = 1; l < L; l++) {
-                weights[l] -= ETA*weightDerivativesTotal[l]/m;
-                biases[l] -= ETA*biasDerivativesTotal[l]/m;
+                weights[l] -= (ETA/m)*weightDerivativesTotal[l];
+                biases[l] -= (ETA/m)*biasDerivativesTotal[l];
             }            
             return totalCost/(double)m;
         }
@@ -199,25 +186,40 @@ class Network {
 
         //INITIALIZE WEIGHT VALUES
         void initializeWeightsMatrix(int index) {
-            Eigen::MatrixXd& mat = weights[index];
-            for (int r = 0; r < mat.rows(); r++) {
-                for (int c = 0; c < mat.cols(); c++) {
+            Mat2d& mat = weights[index];
+            for (int r = 0; r < mat.getRows(); r++) {
+                for (int c = 0; c < mat.getCols(); c++) {
                     mat(r,c) = generateWeightValue(layerSizes[index-1]);
                 }
             }
         }
 
+        //Indexing Helper
+        void indexInitializeHelper() {
+            activations.push_back(Mat2d(layerSizes[0],1));
+            zs.push_back(Mat2d(layerSizes[0],1));
 
-        //DEFINE ACTIVATION FUNCTION
-        double activationFunc(double in) {
-            return in;                                                  //x = y
-            //return 1 / (1 + exp(-in));                                //Sigmoid
-        }
+            //push null value for simpler indexing
+            weights.push_back(Mat2d());   
+            weightDerivatives.push_back(Mat2d());
+            weightDerivativesTotal.push_back(Mat2d());
+            biases.push_back(Mat2d());
+            biasDerivatives.push_back(Mat2d());
+            biasDerivativesTotal.push_back(Mat2d());
 
+            for (int l = 1; l < L; l++) {
+                activations.push_back(Mat2d(layerSizes[l],1));
+                zs.push_back(Mat2d(layerSizes[l],1));
 
-        double activationPrime(double in) {
-            return 1;                                                   //x = y
-            //return activationFunc(in) * (1 - activationFunc(in));     //Sigmoid
+                weights.push_back(Mat2d(layerSizes[l],layerSizes[l-1]));
+                initializeWeightsMatrix(l);
+                weightDerivatives.push_back(Mat2d(layerSizes[l],layerSizes[l-1]));
+                weightDerivativesTotal.push_back(Mat2d(layerSizes[l],layerSizes[l-1]));
+
+                biases.push_back(Mat2d(layerSizes[l],1));
+                biasDerivatives.push_back(Mat2d(layerSizes[l],1));
+                biasDerivativesTotal.push_back(Mat2d(layerSizes[l],1));
+            }
         }
 };
 
@@ -227,16 +229,21 @@ class Network {
 int main() {
     Network a(vector<int>{1, 16, 1});
 
-    Eigen::MatrixXd input(1,90);
-    Eigen::MatrixXd output(1,90);
-    Eigen::MatrixXd testing(1,10);
+    Mat2d input(1,90);
+    Mat2d output(1,90);
+    Mat2d testing(1,10);
 
     for (int i = 0; i < 90; i++) {
         input(0, i) = i/(double)90;
         output(0, i) = i/(double)90;
     }
 
-    testing << 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.55;
+    for (int i = 1; i < 10; i++) {
+        testing(0,i-1) = i/(double)10;
+    }
+    testing(0,9) = 0.55;
+
+    cout << testing;
 
     a.SGD(input, output, 100, 50, 0.1);
     a.testDisplay(testing);
