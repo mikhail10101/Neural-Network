@@ -1,5 +1,4 @@
 # neural network from scratch
-C++ neural network built using Eigen matrices
+C++ neural network built from scratch
 
-To work with this repository, clone it and install the Eigen library.
-If needed, modify Eigen's include path for your personal configuration.
+Mat2d is a small 2d matrix library made for the neural network
